@@ -2,7 +2,6 @@ package testTask.crawler.services.impl;
 
 import org.apache.commons.io.FileUtils;
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
@@ -19,6 +18,10 @@ import java.util.Optional;
 
 @Service
 public class ArticleServiceImpl implements ArticleService {
+
+    private static final String TITLE_ID = "firstHeading";
+    private static final String INFOBOX_CLASS_NAME = "infobox vcard";
+    private static final String IMG_TAG = "img";
     private ArticleRepository articleRepository;
 
     public ArticleServiceImpl(ArticleRepository articleRepository) {
@@ -61,32 +64,11 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public Article parseFromWikiUrl(String url) {
         try {
-            //get Html page
-            Document doc = Jsoup.connect(url).get();
-            //get body of page
-            Element body = doc.body();
-
-            //get title by its Id
-            Element firstHeading = body.getElementById("firstHeading");
-            String title = firstHeading.text();
+            //get body of Html page
+            Element body = Jsoup.connect(url).get().body();
             Article article = new Article();
-            article.setTitle(title);
-
-            //search if page contains infobox
-            Elements infobox = body.getElementsByClass("infobox vcard");
-            if (infobox.size() > 0) {
-                //get first founded infobox
-                Element element = infobox.get(0);
-                //search if infobox contains img
-                Elements imgs = element.getElementsByTag("img");
-                if (imgs.size() > 0) {
-                    //get first img in box and set absolute path
-                    String imgSrc = imgs.get(0).absUrl("src");
-                    File img = new File(imgSrc.substring(imgSrc.lastIndexOf("/") + 1));
-                    FileUtils.copyURLToFile(new URL(imgSrc), img);
-                    article.setFilePath(img.getAbsolutePath());
-                }
-            }
+            article.setTitle(getTitle(body));
+            article.setFilePath(downloadImgAndGetPath(body));
             return article;
         } catch (IOException e) {
             //handle exception
@@ -94,5 +76,38 @@ public class ArticleServiceImpl implements ArticleService {
             System.out.println(e.getMessage());
         }
         return null;
+    }
+
+    private String getTitle(Element body){
+        //get title element by its Id
+        Element firstHeading = body.getElementById(TITLE_ID);
+        return firstHeading.text();
+    }
+
+    private String downloadImgAndGetPath(Element body) throws IOException {
+        Element infobox = getFirstInfobox(body);
+        if(infobox != null){
+            Elements imgs = infobox.getElementsByTag(IMG_TAG);
+            return getFirstImageAndDownloadIt(imgs);
+        }
+        return null;
+    }
+
+    private Element getFirstInfobox(Element body){
+        Elements infoboxArr = body.getElementsByClass(INFOBOX_CLASS_NAME);
+        if(infoboxArr.size() > 0){
+            return infoboxArr.get(0);
+        } else return null;
+    }
+
+    private String getFirstImageAndDownloadIt(Elements imgs) throws IOException {
+        if (imgs.size() > 0) {
+            //get first img in array
+            String imgSrc = imgs.get(0).absUrl("src");
+            File img = new File(imgSrc.substring(imgSrc.lastIndexOf("/") + 1));
+            //download file
+            FileUtils.copyURLToFile(new URL(imgSrc), img);
+            return img.getAbsolutePath();
+        } else return null;
     }
 }
